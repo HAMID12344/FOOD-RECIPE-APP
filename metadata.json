@@ -1,0 +1,6 @@
+{
+  "name": "FoodHub Lite – Recipe & Meal Planner",
+  "description": "Discover, save, and organize personal and online recipes, plan weekly meals across breakfast, lunch, and dinner, and auto-generate offline-ready grocery checklists.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

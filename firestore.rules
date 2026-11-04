@@ -1,0 +1,337 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net: Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Hardened Global Primitives ---
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Pure verified token check with zero DB reads — safe inside `allow list`
+    function isBootstrapAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'hamidalideveloper01@gmail.com';
+    }
+
+    // Full admin check for single-document operations (Auth -> Static -> DB Read)
+    function isAdmin() {
+      return isBootstrapAdmin() || (
+        isVerifiedUser() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Relational parent existence & active membership check
+    function isActiveCustomer(uid) {
+      return exists(/databases/$(database)/documents/customers/$(uid)) &&
+        get(/databases/$(database)/documents/customers/$(uid)).data.status in ['active', 'vip'];
+    }
+
+    // Total Array Guarding for optional multi-select recipe category labels (1..10 items, 1..40 chars)
+    function isValidOptionalCategories(data) {
+      return !('categories' in data) || (
+        data.categories is list &&
+        data.categories.size() >= 1 &&
+        data.categories.size() <= 10 &&
+        data.categories[0] is string &&
+        data.categories[0].size() >= 1 &&
+        data.categories[0].size() <= 40
+      );
+    }
+
+    // --- Entity Validation Blueprints (Synchronized with firebase-blueprint.json) ---
+
+    function isValidAdminGrant(data) {
+      return data.keys().hasAll(['uid', 'email', 'grantedAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'grantedAt']) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
+        data.grantedAt is timestamp;
+    }
+
+    function isValidCustomerProfile(data) {
+      return data.keys().hasAll(['uid', 'name', 'email', 'role', 'status', 'kitchenType', 'phone', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'name', 'email', 'role', 'status', 'kitchenType', 'phone', 'createdAt', 'updatedAt']) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
+        data.role is string && data.role.size() >= 5 && data.role.size() <= 16 && data.role in ['admin', 'customer'] &&
+        data.status is string && data.status.size() >= 3 && data.status.size() <= 16 && data.status in ['active', 'vip', 'suspended', 'archived'] &&
+        data.kitchenType is string && data.kitchenType.size() >= 2 && data.kitchenType.size() <= 60 &&
+        data.phone is string && data.phone.size() <= 40 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidGlobalRecipe(data) {
+      return data.keys().hasAll(['title', 'category', 'imageUrl', 'ingredients', 'steps', 'published', 'authorId', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['title', 'category', 'categories', 'imageUrl', 'ingredients', 'steps', 'published', 'authorId', 'createdAt', 'updatedAt']) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 140 &&
+        data.category is string && data.category.size() >= 1 && data.category.size() <= 240 &&
+        isValidOptionalCategories(data) &&
+        data.imageUrl is string && data.imageUrl.size() <= 150000 &&
+        data.ingredients is string && data.ingredients.size() >= 1 && data.ingredients.size() <= 8000 &&
+        data.steps is string && data.steps.size() >= 1 && data.steps.size() <= 12000 &&
+        data.published is bool &&
+        data.authorId is string && data.authorId.size() >= 1 && data.authorId.size() <= 128 && data.authorId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidUserRecipe(data) {
+      return data.keys().hasAll(['ownerId', 'title', 'category', 'imageUrl', 'ingredients', 'steps', 'isFromApi', 'apiMealId', 'isFavorite', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['ownerId', 'title', 'category', 'categories', 'imageUrl', 'ingredients', 'steps', 'isFromApi', 'apiMealId', 'isFavorite', 'createdAt', 'updatedAt']) &&
+        data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 && data.ownerId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 140 &&
+        data.category is string && data.category.size() >= 1 && data.category.size() <= 240 &&
+        isValidOptionalCategories(data) &&
+        data.imageUrl is string && data.imageUrl.size() <= 150000 &&
+        data.ingredients is string && data.ingredients.size() >= 1 && data.ingredients.size() <= 8000 &&
+        data.steps is string && data.steps.size() >= 1 && data.steps.size() <= 12000 &&
+        data.isFromApi is bool &&
+        data.apiMealId is string && data.apiMealId.size() <= 128 &&
+        data.isFavorite is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidMealPlanSlot(data) {
+      return data.keys().hasAll(['ownerId', 'recipeId', 'day', 'mealType', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['ownerId', 'recipeId', 'day', 'mealType', 'createdAt', 'updatedAt']) &&
+        data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 && data.ownerId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.recipeId is string && data.recipeId.size() >= 1 && data.recipeId.size() <= 128 && data.recipeId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.day is string && data.day.size() >= 6 && data.day.size() <= 12 &&
+        data.day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] &&
+        data.mealType is string && data.mealType.size() >= 5 && data.mealType.size() <= 12 &&
+        data.mealType in ['Breakfast', 'Lunch', 'Dinner'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidGroceryItem(data) {
+      return data.keys().hasAll(['ownerId', 'name', 'checked', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['ownerId', 'name', 'checked', 'createdAt', 'updatedAt']) &&
+        data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 && data.ownerId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 200 &&
+        data.checked is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // --- Exhaustive Collection Match Blocks ---
+
+    match /admins/{adminId} {
+      allow get: if isSignedIn() && isValidId(adminId) && (request.auth.uid == adminId || isAdmin());
+      allow list: if isBootstrapAdmin();
+      allow create: if isBootstrapAdmin() &&
+        isValidId(adminId) &&
+        isValidAdminGrant(incoming()) &&
+        incoming().uid == adminId &&
+        incoming().grantedAt == request.time;
+      allow update: if isValidAdminGrant(incoming()) &&
+        isBootstrapAdmin() &&
+        isValidId(adminId) &&
+        incoming().uid == existing().uid &&
+        incoming().grantedAt == existing().grantedAt &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['email']);
+      allow delete: if isSignedIn() && isValidId(adminId) && isBootstrapAdmin();
+    }
+
+    match /customers/{customerId} {
+      // PII Isolation: Only owner or Admin Hamid Ali can read individual customer records
+      allow get: if isSignedIn() && isValidId(customerId) && (request.auth.uid == customerId || isAdmin());
+      // Only Master Admin Hamid Ali can list the Customer Database (zero DB reads in list)
+      allow list: if isBootstrapAdmin();
+
+      allow create: if isVerifiedUser() &&
+        isValidId(customerId) &&
+        isValidCustomerProfile(incoming()) &&
+        incoming().uid == customerId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time && (
+          // Self-registration by customer: strictly 'customer' role & 'active' status
+          (
+            request.auth.uid == customerId &&
+            incoming().email == request.auth.token.email &&
+            incoming().role == 'customer' &&
+            incoming().status == 'active'
+          ) ||
+          // Master Admin Hamid Ali creating own admin profile or adding a customer record
+          isAdmin()
+        );
+
+      allow update: if isValidCustomerProfile(incoming()) &&
+        isVerifiedUser() &&
+        isValidId(customerId) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (existing().status != 'archived' || isAdmin()) && (
+          // Action: Customer edits own display profile fields (cannot touch role, email, or status)
+          (
+            request.auth.uid == customerId &&
+            existing().status in ['active', 'vip'] &&
+            incoming().role == existing().role &&
+            incoming().email == existing().email &&
+            incoming().status == existing().status &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'kitchenType', 'phone', 'updatedAt'])
+          ) ||
+          isAdmin()
+        );
+
+      allow delete: if isVerifiedUser() && isValidId(customerId) && isAdmin();
+    }
+
+    match /global_recipes/{recipeId} {
+      allow get: if isSignedIn() && isValidId(recipeId) && (existing().published == true || isAdmin());
+      allow list: if isSignedIn() && (resource.data.published == true || isBootstrapAdmin());
+
+      allow create: if isVerifiedUser() &&
+        isValidId(recipeId) &&
+        isValidGlobalRecipe(incoming()) &&
+        incoming().authorId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isAdmin();
+
+      allow update: if isValidGlobalRecipe(incoming()) &&
+        isVerifiedUser() &&
+        isValidId(recipeId) &&
+        incoming().authorId == existing().authorId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        isAdmin() && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['published', 'updatedAt']) ||
+          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'category', 'categories', 'imageUrl', 'ingredients', 'steps', 'published', 'updatedAt'])
+        );
+
+      allow delete: if isVerifiedUser() && isValidId(recipeId) && isAdmin();
+    }
+
+    match /user_recipes/{recipeId} {
+      allow get: if isSignedIn() && isValidId(recipeId) && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isBootstrapAdmin());
+
+      allow create: if isVerifiedUser() &&
+        isValidId(recipeId) &&
+        isValidUserRecipe(incoming()) &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (isActiveCustomer(request.auth.uid) || isAdmin());
+
+      allow update: if isValidUserRecipe(incoming()) &&
+        isVerifiedUser() &&
+        isValidId(recipeId) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          (
+            request.auth.uid == existing().ownerId &&
+            isActiveCustomer(request.auth.uid) && (
+              // Action: Toggle Favorite
+              incoming().diff(existing()).affectedKeys().hasOnly(['isFavorite', 'updatedAt']) ||
+              // Action: Edit Recipe Details (including multi-select categories)
+              incoming().diff(existing()).affectedKeys().hasOnly(['title', 'category', 'categories', 'imageUrl', 'ingredients', 'steps', 'isFavorite', 'updatedAt'])
+            )
+          ) ||
+          isAdmin()
+        );
+
+      allow delete: if isVerifiedUser() && isValidId(recipeId) && (
+        (existing().ownerId == request.auth.uid && isActiveCustomer(request.auth.uid)) ||
+        isAdmin()
+      );
+    }
+
+    match /meal_plans/{planId} {
+      allow get: if isSignedIn() && isValidId(planId) && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isBootstrapAdmin());
+
+      allow create: if isVerifiedUser() &&
+        isValidId(planId) &&
+        isValidMealPlanSlot(incoming()) &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (isActiveCustomer(request.auth.uid) || isAdmin());
+
+      allow update: if isValidMealPlanSlot(incoming()) &&
+        isVerifiedUser() &&
+        isValidId(planId) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          (
+            request.auth.uid == existing().ownerId &&
+            isActiveCustomer(request.auth.uid) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['recipeId', 'day', 'mealType', 'updatedAt'])
+          ) ||
+          isAdmin()
+        );
+
+      allow delete: if isVerifiedUser() && isValidId(planId) && (
+        (existing().ownerId == request.auth.uid && isActiveCustomer(request.auth.uid)) ||
+        isAdmin()
+      );
+    }
+
+    match /grocery_items/{itemId} {
+      allow get: if isSignedIn() && isValidId(itemId) && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isBootstrapAdmin());
+
+      allow create: if isVerifiedUser() &&
+        isValidId(itemId) &&
+        isValidGroceryItem(incoming()) &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (isActiveCustomer(request.auth.uid) || isAdmin());
+
+      allow update: if isValidGroceryItem(incoming()) &&
+        isVerifiedUser() &&
+        isValidId(itemId) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          (
+            request.auth.uid == existing().ownerId &&
+            isActiveCustomer(request.auth.uid) && (
+              // Action: Toggle Checked
+              incoming().diff(existing()).affectedKeys().hasOnly(['checked', 'updatedAt']) ||
+              // Action: Rename or Sync Quantity
+              incoming().diff(existing()).affectedKeys().hasOnly(['name', 'checked', 'updatedAt'])
+            )
+          ) ||
+          isAdmin()
+        );
+
+      allow delete: if isVerifiedUser() && isValidId(itemId) && (
+        (existing().ownerId == request.auth.uid && isActiveCustomer(request.auth.uid)) ||
+        isAdmin()
+      );
+    }
+  }
+}

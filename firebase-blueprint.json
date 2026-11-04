@@ -1,0 +1,338 @@
+{
+  "entities": {
+    "AdminGrant": {
+      "title": "AdminGrant",
+      "description": "Explicit administrator privilege grant keyed by Firebase Auth UID.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth UID of the administrator."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 254,
+          "description": "Verified email address of the administrator."
+        },
+        "grantedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when admin privilege was granted."
+        }
+      },
+      "required": ["uid", "email", "grantedAt"]
+    },
+    "CustomerProfile": {
+      "title": "CustomerProfile",
+      "description": "Customer or admin account record stored in the Customer Database.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Owner UID or admin-created customer identifier."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Full display name of the customer or administrator."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 254,
+          "description": "Customer email address (PII restricted to owner and admin)."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "customer"],
+          "minLength": 5,
+          "maxLength": 16,
+          "description": "RBAC role of the account."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "vip", "suspended", "archived"],
+          "minLength": 3,
+          "maxLength": 16,
+          "description": "Account lifecycle status managed by Admin Hamid Ali."
+        },
+        "kitchenType": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 60,
+          "description": "Customer household segment such as Student Hostel, Family Kitchen, or Busy Professional."
+        },
+        "phone": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 40,
+          "description": "Optional contact phone or campus hostel note."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Immutable server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of most recent profile update."
+        }
+      },
+      "required": ["uid", "name", "email", "role", "status", "kitchenType", "phone", "createdAt", "updatedAt"]
+    },
+    "GlobalRecipe": {
+      "title": "GlobalRecipe",
+      "description": "Platform-wide recipe curated and controlled by Admin Hamid Ali for all customers.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140,
+          "description": "Title of the global catalog recipe."
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240,
+          "description": "Comma-separated summary of culinary categories and dietary labels (e.g. Chicken, Quick, Gluten-Free)."
+        },
+        "categories": {
+          "type": "array",
+          "description": "Bounded list (1 to 10 items) of category and dietary label strings (each 1-40 chars)."
+        },
+        "imageUrl": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 150000,
+          "description": "Recipe cover photo URL or compressed JPEG data URL."
+        },
+        "ingredients": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000,
+          "description": "Newline-separated list of recipe ingredients."
+        },
+        "steps": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 12000,
+          "description": "Newline-separated cooking instructions."
+        },
+        "published": {
+          "type": "boolean",
+          "description": "Whether this global recipe is visible to customers."
+        },
+        "authorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of Admin Hamid Ali who published the recipe."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Immutable server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last modification."
+        }
+      },
+      "required": ["title", "category", "imageUrl", "ingredients", "steps", "published", "authorId", "createdAt", "updatedAt"]
+    },
+    "UserRecipe": {
+      "title": "UserRecipe",
+      "description": "Personal or saved recipe owned by an individual customer or admin.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Immutable UID of the customer who owns this recipe."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140,
+          "description": "Recipe title."
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240,
+          "description": "Comma-separated summary of recipe categories and dietary labels (e.g. Quick, Gluten-Free)."
+        },
+        "categories": {
+          "type": "array",
+          "description": "Bounded list (1 to 10 items) of category and dietary label strings (each 1-40 chars)."
+        },
+        "imageUrl": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 150000,
+          "description": "Cover photo URL or compressed JPEG data URL."
+        },
+        "ingredients": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000,
+          "description": "Newline-separated ingredients."
+        },
+        "steps": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 12000,
+          "description": "Newline-separated cooking instructions."
+        },
+        "isFromApi": {
+          "type": "boolean",
+          "description": "True when saved from TheMealDB or Global Catalog."
+        },
+        "apiMealId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 128,
+          "description": "Optional external TheMealDB or global catalog reference ID."
+        },
+        "isFavorite": {
+          "type": "boolean",
+          "description": "Whether the customer bookmarked this recipe in Favorites."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Immutable server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update."
+        }
+      },
+      "required": ["ownerId", "title", "category", "imageUrl", "ingredients", "steps", "isFromApi", "apiMealId", "isFavorite", "createdAt", "updatedAt"]
+    },
+    "MealPlanSlot": {
+      "title": "MealPlanSlot",
+      "description": "Weekly meal planner assignment for a customer.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Immutable UID of the customer."
+        },
+        "recipeId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "ID of the assigned recipe."
+        },
+        "day": {
+          "type": "string",
+          "enum": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+          "minLength": 6,
+          "maxLength": 12,
+          "description": "Day of week."
+        },
+        "mealType": {
+          "type": "string",
+          "enum": ["Breakfast", "Lunch", "Dinner"],
+          "minLength": 5,
+          "maxLength": 12,
+          "description": "Meal slot type."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Immutable server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": ["ownerId", "recipeId", "day", "mealType", "createdAt", "updatedAt"]
+    },
+    "GroceryItem": {
+      "title": "GroceryItem",
+      "description": "Customer grocery checklist item.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Immutable UID of the customer."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Grocery item label and quantity."
+        },
+        "checked": {
+          "type": "boolean",
+          "description": "True if the item has been bought."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Immutable server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": ["ownerId", "name", "checked", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminGrant" },
+      "description": "Trusted administrator grants managed by Master Admin Hamid Ali."
+    },
+    "/customers/{customerId}": {
+      "schema": { "$ref": "#/entities/CustomerProfile" },
+      "description": "Customer Database storing registered customer profiles and Admin Hamid Ali's master profile."
+    },
+    "/global_recipes/{recipeId}": {
+      "schema": { "$ref": "#/entities/GlobalRecipe" },
+      "description": "Global catalog recipes curated by Admin Hamid Ali and visible to all customers when published."
+    },
+    "/user_recipes/{recipeId}": {
+      "schema": { "$ref": "#/entities/UserRecipe" },
+      "description": "Personal and saved recipes owned by individual customers."
+    },
+    "/meal_plans/{planId}": {
+      "schema": { "$ref": "#/entities/MealPlanSlot" },
+      "description": "Weekly meal schedule slots owned by individual customers."
+    },
+    "/grocery_items/{itemId}": {
+      "schema": { "$ref": "#/entities/GroceryItem" },
+      "description": "Auto-generated and Snap-to-Add grocery checklist items owned by individual customers."
+    }
+  }
+}
