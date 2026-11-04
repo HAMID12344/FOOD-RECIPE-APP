@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { signInWithPopup } from 'firebase/auth';
-import { ArrowLeft, ArrowRight, ShieldCheck, UserPlus, Users } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ShieldCheck, Users } from 'lucide-react';
 import { CULINARY_ASSETS, PRESET_RECIPE_IMAGES } from '../assets/culinaryAssets';
 import { MASTER_ADMIN_EMAIL, MASTER_ADMIN_NAME, auth, googleProvider } from '../firebase';
 import { KITCHEN_SEGMENTS } from '../types';
@@ -230,14 +230,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onBeforeSignIn }) => {
                       Complete your kitchen details below to add your profile directly to the
                       Customer Database.
                     </p>
-                  </div>
-
-                  <div className="rounded-2xl bg-zinc-50 border border-zinc-200/80 p-3.5 flex items-start gap-3">
-                    <UserPlus className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
-                    <div className="text-xs text-zinc-600 leading-relaxed">
-                      New customer accounts open on <strong className="text-zinc-900">Profile</strong>{' '}
-                      first with starter recipes ready to plan.
-                    </div>
                   </div>
 
                   <div>
