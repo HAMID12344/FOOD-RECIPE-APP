@@ -14,9 +14,10 @@ export interface PendingCustomerOnboarding {
 
 interface AuthScreenProps {
   onBeforeSignIn: (onboarding?: PendingCustomerOnboarding) => void;
+  onLocalSignIn?: (role: 'customer' | 'admin', onboarding?: PendingCustomerOnboarding) => void;
 }
 
-export const AuthScreen: React.FC<AuthScreenProps> = ({ onBeforeSignIn }) => {
+export const AuthScreen: React.FC<AuthScreenProps> = ({ onBeforeSignIn, onLocalSignIn }) => {
   // Page 1 shows ONLY "Log In" or "Sign Up". Page 2 shows the selected action + the Admin button.
   const [page, setPage] = useState<1 | 2>(1);
   const [flow, setFlow] = useState<'login' | 'signup'>('login');
@@ -181,9 +182,32 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onBeforeSignIn }) => {
               {error && (
                 <div
                   role="alert"
-                  className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-xs text-red-800 leading-relaxed"
+                  className="rounded-2xl bg-amber-50 border border-amber-200/90 p-4 text-xs text-amber-900 leading-relaxed space-y-2.5"
                 >
-                  {error}
+                  <div className="font-semibold text-amber-800 flex items-center gap-1.5">
+                    <span>⚠️ Firebase Notice:</span>
+                    <span>{error}</span>
+                  </div>
+                  {error.includes('unauthorized-domain') && (
+                    <p className="text-amber-800/80">
+                      Google OAuth requires adding <code className="bg-amber-100/80 px-1 py-0.5 rounded font-mono">localhost</code> in Firebase Console &gt; Authentication &gt; Settings &gt; Authorized Domains.
+                    </p>
+                  )}
+                  {onLocalSignIn && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onLocalSignIn(flow === 'login' ? 'customer' : 'customer', {
+                          customName: customName.trim() || undefined,
+                          kitchenType,
+                          phone: phone.trim(),
+                        })
+                      }
+                      className="w-full py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-medium text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-sm"
+                    >
+                      <span>🚀 Continue as {customName.trim() || 'Customer'} (Instant Local Access)</span>
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -218,6 +242,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onBeforeSignIn }) => {
                     </span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
+
+                  {onLocalSignIn && (
+                    <button
+                      type="button"
+                      onClick={() => onLocalSignIn('customer')}
+                      className="w-full min-h-[42px] px-4 py-2 rounded-full border border-emerald-700/25 bg-emerald-50/50 hover:bg-emerald-100/60 text-emerald-800 text-xs sm:text-sm font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                    >
+                      <span>⚡ Instant Local Access (Skip Google Sign-In)</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 <form
@@ -303,6 +337,22 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onBeforeSignIn }) => {
                     </span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
+
+                  {onLocalSignIn && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onLocalSignIn('customer', {
+                          customName: customName.trim() || undefined,
+                          kitchenType,
+                          phone: phone.trim(),
+                        })
+                      }
+                      className="w-full min-h-[42px] px-4 py-2 rounded-full border border-emerald-700/25 bg-emerald-50/50 hover:bg-emerald-100/60 text-emerald-800 text-xs sm:text-sm font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                    >
+                      <span>⚡ Instant Local Sign Up (Skip Google Sign-In)</span>
+                    </button>
+                  )}
                 </form>
               )}
 
@@ -326,6 +376,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onBeforeSignIn }) => {
                       : `Admin Login (${MASTER_ADMIN_NAME})`}
                   </span>
                 </button>
+
+                {onLocalSignIn && (
+                  <button
+                    type="button"
+                    onClick={() => onLocalSignIn('admin')}
+                    className="w-full min-h-[40px] px-4 py-2 rounded-full border border-zinc-300 bg-white hover:bg-zinc-100 text-zinc-800 text-xs sm:text-sm font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0" />
+                    <span>Instant Admin Access ({MASTER_ADMIN_NAME})</span>
+                  </button>
+                )}
               </div>
             </div>
           )}

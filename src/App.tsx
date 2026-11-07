@@ -23,7 +23,7 @@ import { RecipeCard } from './components/RecipeCard';
 import { RecipeDetailModal } from './components/RecipeDetailModal';
 import { RecipeFormModal } from './components/RecipeFormModal';
 import { RecipeImage } from './components/RecipeImage';
-import { auth } from './firebase';
+import { auth, MASTER_ADMIN_EMAIL, MASTER_ADMIN_NAME } from './firebase';
 import {
   addGroceryItemDoc,
   addMultipleGroceryItemsBatch,
@@ -34,8 +34,10 @@ import {
   deleteGroceryItemDoc,
   deleteUserRecipeDoc,
   ensureAccountProfile,
+  MealPlanSlotRecord,
   removeMealPlanSlotDoc,
   saveOnlineRecipeForCustomer,
+  SIGNATURE_DISH_TEMPLATES,
   subscribeAllCustomersForAdmin,
   subscribeGlobalRecipes,
   subscribeOwnProfile,
@@ -47,6 +49,7 @@ import {
   toggleUserRecipeFavorite,
   updateOwnCustomerProfile,
   updateUserRecipeDoc,
+  UserRecipeRecord,
 } from './services/firestoreService';
 import {
   CustomerProfileRecord,
@@ -93,12 +96,109 @@ export default function App() {
   // Toast feedback
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Local / Demo Access Mode (when Firebase Auth domain is not yet authorized)
+  const [isLocalMode, setIsLocalMode] = useState<boolean>(false);
+  const isLocalModeRef = useRef<boolean>(false);
+  isLocalModeRef.current = isLocalMode;
+
   // Onboarding metadata captured prior to Google Sign-In popup
   const pendingOnboardingRef = useRef<PendingCustomerOnboarding | undefined>(undefined);
 
   const showToast = useCallback((message: string) => {
     setToastMessage(message);
   }, []);
+
+  const handleLocalSignIn = useCallback(
+    (role: 'customer' | 'admin', onboarding?: PendingCustomerOnboarding) => {
+      const isMasterAdmin = role === 'admin';
+      const uid = isMasterAdmin ? 'local_admin_hamid' : 'local_cust_' + Date.now();
+      const demoProfile: CustomerProfileRecord = {
+        id: uid,
+        uid,
+        name: isMasterAdmin
+          ? MASTER_ADMIN_NAME
+          : onboarding?.customName?.trim() || 'YAWAR',
+        email: isMasterAdmin
+          ? MASTER_ADMIN_EMAIL
+          : onboarding?.customName
+          ? `${onboarding.customName.toLowerCase().replace(/\s+/g, '')}@example.com`
+          : 'yawar@example.com',
+        role: isMasterAdmin ? 'admin' : 'customer',
+        status: 'active',
+        kitchenType: onboarding?.kitchenType || (isMasterAdmin ? 'Master App Control' : 'Student Hostel'),
+        phone: onboarding?.phone || '03273554515',
+        createdAtMs: Date.now(),
+      };
+
+      const starterUserRecipes: UserRecipeRecord[] = SIGNATURE_DISH_TEMPLATES.slice(
+        0,
+        isMasterAdmin ? 9 : 4
+      ).map((tpl, i) => ({
+        id: `local_rec_${i + 1}`,
+        ownerId: uid,
+        title: tpl.title,
+        category: tpl.categories[0] || 'Dinner',
+        categories: tpl.categories,
+        imageUrl: tpl.imageUrl,
+        ingredients: tpl.ingredients,
+        steps: tpl.steps,
+        isFromApi: false,
+        isFavorite: i === 0,
+        createdAtMs: Date.now() - i * 60000,
+        updatedAtMs: Date.now() - i * 60000,
+      }));
+
+      const sampleGlobalRecipes: GlobalRecipeRecord[] = SIGNATURE_DISH_TEMPLATES.map((tpl, i) => ({
+        id: `global_rec_${i + 1}`,
+        title: tpl.title,
+        category: tpl.categories[0] || 'Dinner',
+        categories: tpl.categories,
+        imageUrl: tpl.imageUrl,
+        ingredients: tpl.ingredients,
+        steps: tpl.steps,
+        published: true,
+        authorId: 'admin_hamid_ali',
+      }));
+
+      const sampleCustomers: CustomerProfileRecord[] = [
+        demoProfile,
+        {
+          id: 'cust_sample_1',
+          uid: 'cust_sample_1',
+          name: 'Bilal Ahmed',
+          email: 'bilal@example.com',
+          role: 'customer',
+          status: 'active',
+          kitchenType: 'Student Hostel',
+          phone: '03001234567',
+          createdAtMs: Date.now() - 86400000,
+        },
+        {
+          id: 'cust_sample_2',
+          uid: 'cust_sample_2',
+          name: 'Zainab Noor',
+          email: 'zainab@example.com',
+          role: 'customer',
+          status: 'vip',
+          kitchenType: 'Family Home',
+          phone: '03219876543',
+          createdAtMs: Date.now() - 172800000,
+        },
+      ];
+
+      setIsLocalMode(true);
+      isLocalModeRef.current = true;
+      setProfile(demoProfile);
+      setUserRecipes(starterUserRecipes);
+      setGlobalRecipes(sampleGlobalRecipes);
+      if (isMasterAdmin) {
+        setAllCustomers(sampleCustomers);
+      }
+      setActiveTab(ScreenTab.Profile);
+      showToast(`Welcome ${demoProfile.name}! Opened Profile with instant access.`);
+    },
+    [showToast]
+  );
 
   useEffect(() => {
     if (!toastMessage) return;
@@ -122,6 +222,7 @@ export default function App() {
     };
 
     const unsubAuth = onAuthStateChanged(auth, async (fbUser) => {
+      if (isLocalModeRef.current) return;
       clearDataSubscriptions();
 
       if (!fbUser) {
@@ -215,7 +316,15 @@ export default function App() {
   }, [userRecipes]);
 
   const handleLogout = async () => {
-    await signOut(auth);
+    setIsLocalMode(false);
+    isLocalModeRef.current = false;
+    setProfile(null);
+    setUserRecipes([]);
+    setGlobalRecipes([]);
+    setAllCustomers([]);
+    setMealPlan([]);
+    setGroceryItems([]);
+    await signOut(auth).catch(() => {});
     setSelectedSavedRecipe(null);
     setSelectedOnlineRecipe(null);
     setActiveTab(ScreenTab.Profile);
@@ -232,6 +341,54 @@ export default function App() {
     steps: string;
   }) => {
     if (!profile || !guardWritableAccount()) return;
+
+    if (isLocalMode) {
+      if (editingRecipe) {
+        setUserRecipes((prev) =>
+          prev.map((r) =>
+            r.id === editingRecipe.id
+              ? {
+                  ...r,
+                  title: payload.title,
+                  category: payload.category,
+                  categories: payload.categories,
+                  imageUrl: payload.image_url,
+                  ingredients: payload.ingredients,
+                  steps: payload.steps,
+                  updatedAtMs: Date.now(),
+                }
+              : r
+          )
+        );
+        if (selectedSavedRecipe?.id === editingRecipe.id) {
+          setSelectedSavedRecipe({
+            ...editingRecipe,
+            ...payload,
+          });
+        }
+        showToast(`Updated "${payload.title}".`);
+      } else {
+        const newRec: UserRecipeRecord = {
+          id: 'local_rec_' + Date.now(),
+          ownerId: profile.uid,
+          title: payload.title,
+          category: payload.category,
+          categories: payload.categories,
+          imageUrl: payload.image_url || CULINARY_ASSETS.heroMealPrep,
+          ingredients: payload.ingredients,
+          steps: payload.steps,
+          isFromApi: false,
+          isFavorite: false,
+          createdAtMs: Date.now(),
+          updatedAtMs: Date.now(),
+        };
+        setUserRecipes((prev) => [newRec, ...prev]);
+        showToast(`Saved "${payload.title}" to My Recipes.`);
+      }
+      setIsRecipeFormOpen(false);
+      setEditingRecipe(null);
+      return;
+    }
 
     if (editingRecipe) {
       await updateUserRecipeDoc(editingRecipe.id, editingRecipe.isFavorite, payload);
@@ -253,6 +410,13 @@ export default function App() {
 
   const handleDeleteRecipe = async (recipeId: string) => {
     if (!profile || !guardWritableAccount()) return;
+    if (isLocalMode) {
+      setUserRecipes((prev) => prev.filter((r) => r.id !== recipeId));
+      setMealPlan((prev) => prev.filter((s) => s.recipeId !== recipeId));
+      setSelectedSavedRecipe(null);
+      showToast('Recipe deleted from your account.');
+      return;
+    }
     await deleteUserRecipeDoc(recipeId, mealPlan);
     setSelectedSavedRecipe(null);
     showToast('Recipe deleted from your account.');
@@ -271,6 +435,25 @@ export default function App() {
         await toggleUserRecipeFavorite(existing.id, true);
       }
       return existing.id;
+    }
+
+    if (isLocalMode) {
+      const newRec: UserRecipeRecord = {
+        id: 'local_copy_' + Date.now(),
+        ownerId: profile.uid,
+        title: globalRec.title,
+        category: globalRec.category,
+        categories: getRecipeCategories(globalRec),
+        imageUrl: globalRec.image_url,
+        ingredients: globalRec.ingredients,
+        steps: globalRec.steps,
+        isFromApi: false,
+        isFavorite: markFavorite,
+        createdAtMs: Date.now(),
+        updatedAtMs: Date.now(),
+      };
+      setUserRecipes((prev) => [newRec, ...prev]);
+      return newRec.id;
     }
 
     const newId = await createUserRecipe(profile.uid, {
@@ -297,6 +480,14 @@ export default function App() {
       return;
     }
 
+    if (isLocalMode) {
+      setUserRecipes((prev) =>
+        prev.map((r) => (r.id === recipeId ? { ...r, isFavorite: !r.isFavorite } : r))
+      );
+      showToast(!favoriteIds.has(recipeId) ? 'Added to Favorites.' : 'Removed from Favorites.');
+      return;
+    }
+
     const nextFav = !favoriteIds.has(recipeId);
     await toggleUserRecipeFavorite(recipeId, nextFav);
     showToast(nextFav ? 'Added to Favorites.' : 'Removed from Favorites.');
@@ -304,6 +495,28 @@ export default function App() {
 
   const handleSaveOnlineRecipe = async (online: OnlineMealRecipe): Promise<string | null> => {
     if (!profile || !guardWritableAccount()) return null;
+
+    if (isLocalMode) {
+      const newRec: UserRecipeRecord = {
+        id: 'online_' + (online.apiId || Date.now()),
+        ownerId: profile.uid,
+        title: online.title,
+        category: online.category || 'Dinner',
+        categories: [online.category || 'Dinner'],
+        imageUrl: online.imageUrl,
+        ingredients: online.ingredients,
+        steps: online.steps,
+        isFromApi: true,
+        apiMealId: online.apiId,
+        isFavorite: false,
+        createdAtMs: Date.now(),
+        updatedAtMs: Date.now(),
+      };
+      setUserRecipes((prev) => [newRec, ...prev]);
+      showToast(`Saved "${online.title}" to your cloud recipe box.`);
+      return newRec.id;
+    }
+
     const id = await saveOnlineRecipeForCustomer(profile.uid, online, userRecipes);
     showToast(`Saved "${online.title}" to your cloud recipe box.`);
     return id;
@@ -336,24 +549,79 @@ export default function App() {
     }
 
     if (!targetRecipeId) return;
+
+    if (isLocalMode) {
+      const existingIdx = mealPlan.findIndex((s) => s.day === day && s.mealType === mealType);
+      const newSlot: MealPlanSlotRecord = {
+        id: `slot_${day}_${mealType}_${Date.now()}`,
+        ownerId: profile.uid,
+        recipeId: targetRecipeId,
+        day,
+        mealType,
+        createdAtMs: Date.now(),
+        updatedAtMs: Date.now(),
+      };
+      if (existingIdx >= 0) {
+        setMealPlan((prev) => prev.map((s, i) => (i === existingIdx ? newSlot : s)));
+      } else {
+        setMealPlan((prev) => [...prev, newSlot]);
+      }
+      showToast(`Scheduled for ${day} ${mealType}.`);
+      return;
+    }
+
     await assignMealPlanSlotDoc(profile.uid, day, mealType, targetRecipeId, mealPlan);
     showToast(`Scheduled for ${day} ${mealType}.`);
   };
 
   const handleRemoveMealSlot = async (slotId: string) => {
     if (!profile || !guardWritableAccount()) return;
+    if (isLocalMode) {
+      setMealPlan((prev) => prev.filter((s) => s.id !== slotId));
+      showToast('Removed meal slot.');
+      return;
+    }
     await removeMealPlanSlotDoc(slotId);
     showToast('Removed meal slot.');
   };
 
   const handleClearWeekPlan = async () => {
     if (!profile || !guardWritableAccount()) return;
+    if (isLocalMode) {
+      setMealPlan([]);
+      showToast('Cleared weekly meal schedule.');
+      return;
+    }
     await clearAllMealPlanSlots(mealPlan);
     showToast('Cleared weekly meal schedule.');
   };
 
   const handleGenerateGroceryChecklist = async () => {
     if (!profile || !guardWritableAccount()) return;
+
+    if (isLocalMode) {
+      const namesToAdd: string[] = [];
+      for (const slot of mealPlan) {
+        const rec = combinedRecipes.find((r) => r.id === slot.recipeId);
+        if (!rec) continue;
+        const lines = rec.ingredients
+          .split(/\r?\n|,/)
+          .map((l) => l.replace(/^[-•*]\s*/, '').trim())
+          .filter((l) => l.length > 1);
+        namesToAdd.push(...lines);
+      }
+      const newItems: GroceryItemRecord[] = namesToAdd.map((name, i) => ({
+        id: `local_groc_${Date.now()}_${i}`,
+        ownerId: profile.uid,
+        name,
+        checked: 0,
+      }));
+      setGroceryItems((prev) => [...newItems, ...prev]);
+      setActiveTab(ScreenTab.Groceries);
+      showToast(`Synced ${newItems.length} items from planned meals.`);
+      return;
+    }
+
     const { addedCount, totalMeals } = await syncGroceriesFromMealPlanBatch(
       profile.uid,
       mealPlan,
@@ -374,6 +642,19 @@ export default function App() {
       .split(/\r?\n|,/)
       .map((l) => l.replace(/^[-•*]\s*/, '').trim())
       .filter((l) => l.length > 1);
+
+    if (isLocalMode) {
+      const newItems: GroceryItemRecord[] = lines.map((name, i) => ({
+        id: `local_groc_${Date.now()}_${i}`,
+        ownerId: profile.uid,
+        name,
+        checked: 0,
+      }));
+      setGroceryItems((prev) => [...newItems, ...prev]);
+      showToast(`Added ${newItems.length} ingredients to your Grocery List.`);
+      return;
+    }
+
     const added = await addMultipleGroceryItemsBatch(profile.uid, lines, groceryItems);
     showToast(`Added ${added} ingredients to your Grocery List.`);
   };
@@ -561,6 +842,7 @@ export default function App() {
         onBeforeSignIn={(onboarding) => {
           pendingOnboardingRef.current = onboarding;
         }}
+        onLocalSignIn={handleLocalSignIn}
       />
     );
   }
@@ -660,7 +942,14 @@ export default function App() {
               plannedCount: mealPlan.length,
               pendingGroceriesCount,
             }}
-            onSaveProfile={(updates) => updateOwnCustomerProfile(profile.uid, updates)}
+            onSaveProfile={async (updates) => {
+              if (isLocalMode) {
+                setProfile((prev) => (prev ? { ...prev, ...updates } : null));
+                showToast('Profile updated!');
+                return;
+              }
+              await updateOwnCustomerProfile(profile.uid, updates);
+            }}
             onNavigateTab={setActiveTab}
             onLogout={handleLogout}
             onNotify={showToast}
@@ -1110,25 +1399,58 @@ export default function App() {
             }}
             onAddItem={async (name) => {
               if (!guardWritableAccount()) return;
+              if (isLocalMode) {
+                setGroceryItems((prev) => [
+                  { id: 'local_groc_' + Date.now(), ownerId: profile.uid, name, checked: 0 },
+                  ...prev,
+                ]);
+                return;
+              }
               await addGroceryItemDoc(profile.uid, name, groceryItems);
             }}
             onAddMultipleItems={async (names) => {
               if (!guardWritableAccount()) return;
+              if (isLocalMode) {
+                const added: GroceryItemRecord[] = names.map((name, i) => ({
+                  id: `local_groc_${Date.now()}_${i}`,
+                  ownerId: profile.uid,
+                  name,
+                  checked: 0,
+                }));
+                setGroceryItems((prev) => [...added, ...prev]);
+                showToast(`Added ${added.length} recognized grocery ${added.length === 1 ? 'item' : 'items'}.`);
+                return;
+              }
               const added = await addMultipleGroceryItemsBatch(profile.uid, names, groceryItems);
               showToast(`Added ${added} recognized grocery ${added === 1 ? 'item' : 'items'}.`);
             }}
             onToggleItem={async (itemId) => {
               if (!guardWritableAccount()) return;
+              if (isLocalMode) {
+                setGroceryItems((prev) =>
+                  prev.map((i) => (i.id === itemId ? { ...i, checked: i.checked === 1 ? 0 : 1 } : i))
+                );
+                return;
+              }
               const found = groceryItems.find((i) => i.id === itemId);
               if (!found) return;
               await toggleGroceryItemDoc(itemId, found.checked === 0);
             }}
             onDeleteItem={async (itemId) => {
               if (!guardWritableAccount()) return;
+              if (isLocalMode) {
+                setGroceryItems((prev) => prev.filter((i) => i.id !== itemId));
+                return;
+              }
               await deleteGroceryItemDoc(itemId);
             }}
             onClearChecked={async () => {
               if (!guardWritableAccount()) return;
+              if (isLocalMode) {
+                setGroceryItems((prev) => prev.filter((i) => i.checked !== 1));
+                showToast('Cleared bought grocery items.');
+                return;
+              }
               await clearCheckedGroceriesBatch(groceryItems);
               showToast('Cleared bought grocery items.');
             }}
